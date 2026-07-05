@@ -1,0 +1,52 @@
+#!/bin/sh
+#
+# post-commit
+#
+# DevMesh git hook — fires automatically after every local `git commit`.
+#
+# WHAT THIS DOES:
+# Triggers backend/run_review.py against the commit that was just made
+# (HEAD vs HEAD~1), in the background, so `git commit` returns immediately
+# instead of blocking for the 20-40s+ it can take for the LLM to review
+# the diff.
+#
+# WHY BACKGROUNDED:
+# A post-commit hook that blocks the terminal for the length of an LLM
+# call would make normal `git commit` usage painful for the whole team.
+# Running with `&` detaches it; findings still show up via the WebSocket
+# broadcaster (ws_broadcaster.py, started automatically when run_review.py
+# is imported) and the plain-text report written to backend/devmesh_report.txt.
+#
+# INSTALL:
+# This file needs to live at .git/hooks/post-commit inside the repo AND
+# be executable (`chmod +x .git/hooks/post-commit`), or git will silently
+# ignore it. setup.sh handles both of these steps for you — you shouldn't
+# need to do this by hand unless you're testing the hook in isolation.
+#
+# NOTE ON --staged:
+# Deliberately NOT passing --staged here. By the time a post-commit hook
+# runs, the commit already exists, so the "last commit" diff (the default
+# in run_review.py) is the correct one to review — --staged would look at
+# whatever's currently staged for the *next* commit, which is usually
+# empty right after a commit.
+
+REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null)"
+
+if [ -z "$REPO_ROOT" ]; then
+    echo "[post-commit] Could not determine repo root — skipping DevMesh review."
+    exit 0
+fi
+
+cd "$REPO_ROOT/backend" || {
+    echo "[post-commit] Could not cd into backend/ — skipping DevMesh review."
+    exit 0
+}
+
+echo "[post-commit] DevMesh review triggered in background (commit $(git rev-parse --short HEAD))."
+
+# Backgrounded and detached from the hook's own stdout/stderr so the
+# terminal returns to the user immediately. Output still goes to
+# nohup.out in backend/ if you need to check what happened.
+nohup python run_review.py > /tmp/devmesh_post_commit.log 2>&1 &
+
+exit 0
