@@ -1,4 +1,4 @@
-# DevMesh — Privacy-First On-Device AI Code Review Agent
+# our project
 
 > Skeleton / pre-orientation build. See `PROJECT_KNOWLEDGE.md` (not in repo, kept
 > separately) for full architecture and rationale.
