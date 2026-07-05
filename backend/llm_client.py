@@ -37,7 +37,7 @@ class LLMResult:
 # Default timeout is generous because CPU-only inference on larger diffs
 # (or the first call after Ollama starts, which includes model load time)
 # can take well over a minute. Override with: set DEVMESH_TIMEOUT=600
-DEFAULT_TIMEOUT = int(os.environ.get("DEVMESH_TIMEOUT", "300"))
+DEFAULT_TIMEOUT = int(os.environ.get("DEVMESH_TIMEOUT", "420"))
 
 
 def review_hunk(prompt: str, model: str = MODEL_NAME, timeout: int = DEFAULT_TIMEOUT) -> LLMResult:

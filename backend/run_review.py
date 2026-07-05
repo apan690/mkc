@@ -25,10 +25,12 @@ from prompt_builder import build_prompt
 from llm_client import review_hunk
 from response_parser import parse_findings
 from ws_broadcaster import broadcast_findings
+from ws_broadcaster import _start_server_thread
 from report_generator import generate_report
 
 
 def main():
+    _start_server_thread()
     parser = argparse.ArgumentParser(description="DevMesh skeleton pipeline runner")
     parser.add_argument("--repo", default=".", help="Path to the git repo to review")
     parser.add_argument(
@@ -79,6 +81,9 @@ def main():
     # Fan out #2: report (stub)
     report_path = generate_report(dict(all_findings))
     print(f"\n[run_review] Report written to: {report_path}")
+   
+    print("\n[run_review] Keeping websocket alive for 30 seconds...")
+    input()
 
 
 if __name__ == "__main__":
