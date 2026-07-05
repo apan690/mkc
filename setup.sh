@@ -8,7 +8,17 @@
 #   1. Installs Python dependencies (backend/requirements.txt)
 #   2. Installs the post-commit git hook (hooks/post-commit -> .git/hooks/post-commit)
 #   3. Starts the FastAPI webhook listener in the background (port 8000)
+#   4. Starts the Expo mobile dev server in the background (mobile/)
 #
+# NOTE ON STEP 4: Expo's dev server is normally run in its own foreground
+# terminal — it prints a live QR code and accepts keypresses (r = reload,
+# a/i = open on Android/iOS, etc). Backgrounding it here trades that
+# interactivity for one-command convenience: the QR code still gets
+# written to a log file (see below) and re-scanning it works fine, but
+# you lose the keypress shortcuts. If you want the interactive experience,
+# skip step 4's automation and just run `cd mobile && npx expo start`
+# yourself in its own terminal — that's equally valid and arguably nicer
+# for active mobile development.
 # WHAT THIS DELIBERATELY DOES NOT DO:
 #   Start the WebSocket broadcaster as a separate step. It doesn't need
 #   to be — ws_broadcaster.py starts its server (ws://0.0.0.0:8765)
@@ -53,7 +63,7 @@ else
 fi
 
 # --- 1. Install Python dependencies ------------------------------------
-echo "[1/3] Installing Python dependencies from backend/requirements.txt..."
+echo "[1/4] Installing Python dependencies from backend/requirements.txt..."
 if command -v pip3 &> /dev/null; then
     PIP_CMD=pip3
 else
@@ -71,7 +81,7 @@ echo
 
 # --- 2. Install the post-commit hook -----------------------------------
 if [ "$IS_GIT_REPO" -eq 1 ]; then
-    echo "[2/3] Installing post-commit git hook..."
+    echo "[2/4] Installing post-commit git hook..."
     if [ ! -f "hooks/post-commit" ]; then
         echo "      WARNING: hooks/post-commit not found — skipping hook install."
     else
@@ -80,12 +90,12 @@ if [ "$IS_GIT_REPO" -eq 1 ]; then
         echo "      Installed to .git/hooks/post-commit (and made executable)."
     fi
 else
-    echo "[2/3] Skipped (not a git repo)."
+    echo "[2/4] Skipped (not a git repo)."
 fi
 echo
 
 # --- 3. Start the webhook listener --------------------------------------
-echo "[3/3] Starting FastAPI webhook listener on port 8000..."
+echo "[3/4] Starting FastAPI webhook listener on port 8000..."
 cd backend
 
 # Guard against double-starting the listener if setup.sh is re-run while
@@ -105,6 +115,42 @@ fi
 cd "$SCRIPT_DIR"
 echo
 
+# --- 4. Start the mobile app (Expo) --------------------------------------
+echo "[4/4] Starting Expo mobile dev server..."
+if [ ! -d "mobile" ]; then
+    echo "      WARNING: mobile/ not found — skipping. Run 'npx expo start' manually"
+    echo "      from wherever the mobile app lives."
+else
+    cd mobile
+
+    if [ ! -d "node_modules" ]; then
+        echo "      node_modules not found — running npm install first (one-time)..."
+        if ! npm install; then
+            echo "      WARNING: npm install failed. Fix that, then run"
+            echo "      'npx expo start' manually from mobile/."
+            cd "$SCRIPT_DIR"
+            echo
+            echo "=== Setup complete (mobile step skipped) ==="
+            exit 0
+        fi
+    fi
+
+    # Backgrounded for one-command convenience — see the note near the top
+    # of this script for the tradeoff (you lose Expo's interactive
+    # keypress shortcuts this way). The QR code still lands in the log
+    # file below and can be re-scanned from there; if you'd rather have
+    # the live interactive terminal, kill this process and run
+    # `npx expo start` yourself in its own terminal instead.
+    nohup npx expo start > /tmp/devmesh_expo.log 2>&1 &
+    EXPO_PID=$!
+    sleep 3
+    echo "      Started (PID $EXPO_PID). QR code + dev server URL: /tmp/devmesh_expo.log"
+    echo "      View it now with: cat /tmp/devmesh_expo.log"
+
+    cd "$SCRIPT_DIR"
+fi
+echo
+
 # --- Done ----------------------------------------------------------------
 echo "=== Setup complete ==="
 echo
@@ -117,6 +163,8 @@ echo "        -H \"X-GitHub-Event: pull_request\" \\"
 echo "        -H \"Content-Type: application/json\" \\"
 echo "        -d '{\"action\": \"opened\", \"pull_request\": {\"number\": 1}}'"
 echo "  - Check webhook listener health: curl http://localhost:8000/health"
+echo "  - Scan the QR code to open the mobile app: cat /tmp/devmesh_expo.log"
+echo "    (or open the dev server URL shown there in Expo Go directly)"
 echo "  - Findings stream over ws://0.0.0.0:8765 to the mobile app (if running),"
 echo "    and a plain-text report is written to backend/devmesh_report.txt."
 echo

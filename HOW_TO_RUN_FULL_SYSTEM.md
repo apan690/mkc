@@ -78,10 +78,11 @@ chmod +x setup.sh    # first time only
 ./setup.sh
 ```
 
-This does three things:
+This does four things:
 1. Installs backend Python deps (non-fatal if it fails — see terminal output, you may need `--break-system-packages` or a venv; the script continues to the hook install either way)
 2. Installs `hooks/post-commit` into `.git/hooks/post-commit` and makes it executable
 3. Starts the FastAPI webhook listener in the background on port **8000** (logs: `/tmp/devmesh_webhook.log`)
+4. Starts the Expo mobile dev server in the background (`npm install` first if `mobile/node_modules` doesn't exist yet, then `npx expo start`; logs — including the QR code — go to `/tmp/devmesh_expo.log`)
 
 You'll see:
 ```
@@ -89,22 +90,33 @@ Next steps:
   - Make a commit ... to trigger a review automatically via the post-commit hook.
   - Or simulate a GitHub PR event: curl -X POST http://localhost:8000/webhook ...
   - Check webhook listener health: curl http://localhost:8000/health
+  - Scan the QR code to open the mobile app: cat /tmp/devmesh_expo.log
 ```
 
-Safe to re-run `./setup.sh` anytime — it won't double-start the webhook listener (checks `/health` first) and re-installing the hook is harmless.
+Safe to re-run `./setup.sh` anytime — it won't double-start the webhook listener (checks `/health` first) and re-installing the hook is harmless. It will, however, start a *second* Expo process if you run it twice without killing the first one — Expo doesn't have the same easy health-check as the webhook listener, so if you're re-running `setup.sh`, kill any existing `expo start` process first (`pkill -f "expo start"`) or just skip step 4 and manage the mobile server yourself.
 
 **Note:** `setup.sh` does *not* separately start the WebSocket broadcaster. It doesn't need to — `ws_broadcaster.py` starts its server (`ws://0.0.0.0:8765`) automatically the moment it's imported, which happens as soon as either a commit triggers `run_review.py` or the webhook listener handles a request.
 
+**On backgrounding Expo:** Expo's dev server is normally run in its own foreground terminal — it prints a live QR code and takes keypresses (`r` = reload, `a`/`i` = open on Android/iOS). Running it via `setup.sh` trades that interactivity for one-command convenience: the QR code still lands in `/tmp/devmesh_expo.log` and can be scanned from there, but you lose the keypress shortcuts. If you're actively developing the mobile app, it's often nicer to skip this and just run `cd mobile && npx expo start` yourself in its own terminal (see Section 4 below).
+
 ---
 
-## 4. Start the mobile app
+## 4. Mobile app
 
-In a separate terminal:
+If you ran `./setup.sh` (Section 3), the Expo dev server is already running in the background — the QR code is in `/tmp/devmesh_expo.log`:
 ```bash
+cat /tmp/devmesh_expo.log
+```
+Scan it with Expo Go on your phone.
+
+**Prefer the interactive terminal instead?** (recommended if you're actively developing the mobile app, since you lose Expo's keypress shortcuts — `r` reload, `a`/`i` open on Android/iOS — when it's backgrounded):
+```bash
+pkill -f "expo start"    # stop the backgrounded one first
 cd mobile
 npx expo start
 ```
-Scan the QR code with Expo Go on your phone. **Phone and laptop must be on the same WiFi**, and your laptop's LAN IP must be set correctly in `mobile/App.js`:
+
+Either way: **phone and laptop must be on the same WiFi**, and your laptop's LAN IP must be set correctly in `mobile/App.js`:
 ```js
 const SERVER_IP = "192.168.x.x";  // <-- your laptop's LAN IP, not the phone's
 ```
